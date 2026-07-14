@@ -7,7 +7,6 @@ import { useAuth } from '@/providers/auth-provider';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -16,7 +15,6 @@ import {
   Animated,
   Image,
   LayoutAnimation,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -30,14 +28,6 @@ import {
 let MapView: any;
 let Marker: any;
 
-if (Platform.OS === 'web') {
-  // On web, require the mock component directly.
-  ({ MapView, Marker } = require('../../components/PlatformMap.web'));
-} else {
-  // On native, require the real implementation.
-  ({ MapView, Marker } = require('../../components/PlatformMap'));
-}
-
 interface ClassificationResult {
   label: string;
   recyclable: boolean;
@@ -45,20 +35,6 @@ interface ClassificationResult {
   confidence: number;
   weight_estimate?: number;
   reason: string;
-}
-
-interface DisposalSite {
-  name: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  postal_code?: string;
-  latitude?: number;
-  longitude?: number;
-  distance?: number;
-  phone?: string;
-  url?: string;
-  category?: string;
 }
 
 type RecycleStatus = 'recyclable' | 'special' | 'notRecyclable' | '';
@@ -88,28 +64,12 @@ export default function ScanTab() {
   const [recycleStatus, setRecycleStatus] = useState<RecycleStatus>('');
   const [explanation, setExplanation] = useState('');
   const [showExplanation, setShowExplanation] = useState(false);
-  const [disposalSites, setDisposalSites] = useState<DisposalSite[]>([]);
-  const [loadingSites, setLoadingSites] = useState(false);
-  const [showMap, setShowMap] = useState(false);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [zipCode, setZipCode] = useState<string | null>(null);
 
   const triggerLayoutAnimation = useCallback(() => {
     if (Platform.OS !== 'web') {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      let loc = await Location.getLastKnownPositionAsync();
-      if (!loc) {
-        loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      }
-      setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-    })();
   }, []);
 
   const loadZipCode = useCallback(async () => {
@@ -168,33 +128,6 @@ export default function ScanTab() {
     return data as ClassificationResult;
   }, [zipCode]);
 
-  const fetchDisposalSites = useCallback(async (label: string) => {
-    if (!userLocation) return;
-    setLoadingSites(true);
-    try {
-      let category: string | undefined;
-      const lower = label.toLowerCase();
-      if (lower.includes('battery') || lower.includes('electronic') || lower.includes('e-waste')) {
-        category = 'electronics';
-      } else if (lower.includes('paint') || lower.includes('oil') || lower.includes('chemical') || lower.includes('hazardous')) {
-        category = 'household_hazardous';
-      }
-      const { data, error } = await supabase.functions.invoke('find-sites', {
-        body: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-          radiusKm: 25,
-          category,
-        },
-      });
-      if (!error && data?.sites) {
-        setDisposalSites(data.sites);
-      }
-    } finally {
-      setLoadingSites(false);
-    }
-  }, [userLocation]);
-
   const saveScan = useCallback(async (cls: ClassificationResult, status: string) => {
     if (!user) return;
     const weight = cls.weight_estimate ?? estimateWeight(cls.label);
@@ -214,8 +147,6 @@ export default function ScanTab() {
     setResult(null);
     setExplanation('');
     setShowExplanation(false);
-    setShowMap(false);
-    setDisposalSites([]);
 
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
@@ -241,10 +172,6 @@ export default function ScanTab() {
       setIsExpanded(false);
 
       await saveScan(cls, status);
-
-      if ((status === 'special' || status === 'notRecyclable') && userLocation) {
-        fetchDisposalSites(cls.label);
-      }
     } catch (error) {
       Alert.alert('Scan failed', 'Unable to classify the item. Please try again.');
       setCapturedPhoto(null);
@@ -252,7 +179,7 @@ export default function ScanTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [classifyImage, saveScan, fetchDisposalSites, userLocation]);
+  }, [classifyImage, saveScan]);
 
   const handleScanAnother = useCallback(() => {
     triggerLayoutAnimation();
@@ -261,8 +188,6 @@ export default function ScanTab() {
     setCapturedPhoto(null);
     setIsExpanded(true);
     setShowExplanation(false);
-    setShowMap(false);
-    setDisposalSites([]);
   }, []);
 
   const handleWebSimulate = useCallback(async () => {
@@ -290,21 +215,6 @@ export default function ScanTab() {
     setShowExplanation(true);
     setExplanation(explainWhyText(result.label, recycleStatus));
   }, [result, recycleStatus, showExplanation]);
-
-  const handleShowMap = useCallback(() => {
-    triggerLayoutAnimation();
-    setShowMap(!showMap);
-  }, [showMap]);
-
-  const openInExternalMaps = useCallback((site: DisposalSite) => {
-    const query = encodeURIComponent(`${site.name} ${site.address || ''} ${site.city || ''}`);
-    const url = Platform.select({
-      ios: `maps:0,0?q=${query}`,
-      android: `geo:0,0?q=${query}`,
-      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
-    });
-    if (url) Linking.openURL(url);
-  }, []);
 
   const statusColor = useMemo(() => {
     if (recycleStatus === 'recyclable') return theme.recyclable;
@@ -434,97 +344,12 @@ export default function ScanTab() {
                   {showExplanation ? 'Hide' : 'Explain why'}
                 </ThemedText>
               </Pressable>
-
-              {(recycleStatus === 'special' || recycleStatus === 'notRecyclable') && (
-                <Pressable
-                  style={[styles.actionButton, { backgroundColor: theme.primary + '20' }]}
-                  onPress={handleShowMap}
-                >
-                  <Ionicons name="map-outline" size={18} color={theme.primary} />
-                  <ThemedText type="smallBold" themeColor="primary" style={{ marginLeft: Spacing.one }}>
-                    {showMap ? 'Hide map' : 'Find disposal sites'}
-                  </ThemedText>
-                </Pressable>
-              )}
             </View>
 
             {showExplanation && explanation && (
               <View style={[styles.explanationBox, { backgroundColor: theme.background, borderColor: theme.textSecondary + '20' }]}>
                 <ThemedText type="small">{explanation}</ThemedText>
               </View>
-            )}
-          </ThemedView>
-        )}
-
-        {showMap && (
-          <ThemedView type="backgroundElement" style={styles.mapCard}>
-            <ThemedText type="smallBold" style={{ marginBottom: Spacing.two }}>Nearby disposal locations</ThemedText>
-
-            {loadingSites ? (
-              <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.three }} />
-            ) : disposalSites.length > 0 ? (
-              <View style={{ gap: Spacing.two }}>
-                <MapView
-                  style={styles.map}
-                  initialRegion={
-                    userLocation
-                      ? { latitude: userLocation.latitude, longitude: userLocation.longitude, latitudeDelta: 0.1, longitudeDelta: 0.1 }
-                      : { latitude: 39.83, longitude: -98.58, latitudeDelta: 20, longitudeDelta: 20 }
-                  }
-                  showsUserLocation
-                >
-                  {disposalSites.filter(s => s.latitude && s.longitude).map((site, i) => (
-                    <Marker
-                      key={i}
-                      coordinate={{ latitude: site.latitude!, longitude: site.longitude! }}
-                      title={site.name}
-                      description={[site.address, site.city, site.state].filter(Boolean).join(', ')}
-                    />
-                  ))}
-                </MapView>
-
-                {disposalSites.map((site, i) => (
-                  <Pressable key={i} style={styles.siteRow} onPress={() => openInExternalMaps(site)}>
-                    <Ionicons name="location" size={18} color={theme.primary} />
-                    <View style={{ flex: 1, marginLeft: Spacing.two }}>
-                      <ThemedText type="smallBold">{site.name}</ThemedText>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        {[site.address, site.city, site.state, site.postal_code].filter(Boolean).join(', ')}
-                      </ThemedText>
-                      {site.category && (
-                        <ThemedText type="small" themeColor="textSecondary" style={{ fontStyle: 'italic' }}>
-                          Accepts: {site.category}
-                        </ThemedText>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <ThemedText type="small" themeColor="textSecondary">
-                {userLocation ? 'No disposal sites found nearby. Try a wider search or check local resources.' : 'Enable location access to find nearby disposal sites.'}
-              </ThemedText>
-            )}
-
-            {!userLocation && (
-              <Pressable
-                style={[styles.zipButton, { backgroundColor: theme.primary }]}
-                onPress={async () => {
-                  const { status } = await Location.requestForegroundPermissionsAsync();
-                  if (status === 'granted') {
-                    let loc = await Location.getLastKnownPositionAsync();
-                    if (!loc) {
-                      loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                    }
-                    const newLoc = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-                    setUserLocation(newLoc);
-                    if (result) fetchDisposalSites(result.label);
-                  }
-                }}
-              >
-                <ThemedText type="smallBold" style={{ color: '#fff' }}>Enable location</ThemedText>
-              </Pressable>
             )}
           </ThemedView>
         )}
@@ -646,32 +471,6 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
     borderWidth: 1,
-    marginTop: Spacing.two,
-  },
-  mapCard: {
-    width: '100%',
-    padding: Spacing.four,
-    borderRadius: Spacing.four,
-    gap: Spacing.two,
-  },
-  map: {
-    width: '100%',
-    height: 200,
-    borderRadius: Spacing.three,
-    overflow: 'hidden',
-  },
-  siteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc3',
-  },
-  zipButton: {
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    alignItems: 'center',
     marginTop: Spacing.two,
   },
   emptyState: {
