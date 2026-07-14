@@ -1,4 +1,3 @@
-import { MapView, Marker } from '@/components/PlatformMap';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { estimateWeight, Spacing } from '@/constants/theme';
@@ -25,6 +24,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { MapView, Marker } from '../../components/PlatformMap';
 
 interface ClassificationResult {
   label: string;
