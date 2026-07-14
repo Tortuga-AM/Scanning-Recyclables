@@ -1,4 +1,4 @@
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
-// Re-export the components for native platforms
-export { MapView, Marker, PROVIDER_GOOGLE };
+// Use module.exports to be compatible with the conditional require() in scan.tsx
+module.exports = { MapView, Marker, PROVIDER_GOOGLE };

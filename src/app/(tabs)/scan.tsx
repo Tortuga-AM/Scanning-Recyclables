@@ -24,7 +24,19 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { MapView, Marker } from '../../components/PlatformMap';
+
+// Explicit conditional import to bypass bundler issues with platform extensions.
+// This ensures react-native-maps is never part of the web bundle.
+let MapView: any;
+let Marker: any;
+
+if (Platform.OS === 'web') {
+  // On web, require the mock component directly.
+  ({ MapView, Marker } = require('../../components/PlatformMap.web'));
+} else {
+  // On native, require the real implementation.
+  ({ MapView, Marker } = require('../../components/PlatformMap'));
+}
 
 interface ClassificationResult {
   label: string;

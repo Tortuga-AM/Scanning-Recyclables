@@ -13,7 +13,7 @@ const MockMarker = () => null; // Markers do nothing on the web
 
 const MockProviderGoogle = 'google';
 
-export { MockMapView as MapView, MockMarker as Marker, MockProviderGoogle as PROVIDER_GOOGLE };
+module.exports = { MapView: MockMapView, Marker: MockMarker, PROVIDER_GOOGLE: MockProviderGoogle };
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e0e0e0' },
