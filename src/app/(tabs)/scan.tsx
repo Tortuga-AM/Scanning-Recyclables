@@ -7,7 +7,6 @@ import { useAuth } from '@/providers/auth-provider';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,11 +21,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-
-// Explicit conditional import to bypass bundler issues with platform extensions.
-// This ensures react-native-maps is never part of the web bundle.
-let MapView: any;
-let Marker: any;
 
 interface ClassificationResult {
   label: string;
@@ -86,11 +80,13 @@ export default function ScanTab() {
     }
   }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
+  useEffect(() => {
+    if (user) {
       loadZipCode();
-    }, [loadZipCode])
-  );
+    } else {
+      setZipCode(null);
+    }
+  }, [user, loadZipCode]);
 
   // Smooth looping animation for AI fluid background track
   useEffect(() => {

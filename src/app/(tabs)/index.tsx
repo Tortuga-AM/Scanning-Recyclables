@@ -1,14 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
-import { ScrollView, Pressable, StyleSheet, View, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/providers/auth-provider';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing, Colors, estimateWeight } from '@/constants/theme';
+import { estimateWeight, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/auth-provider';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ScanRow {
   label: string;
@@ -106,12 +106,16 @@ export default function HomeTab() {
     }
   }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
+  useEffect(() => {
+    if (user) {
       loadProfile();
       loadStats();
-    }, [loadProfile, loadStats])
-  );
+    } else {
+      // Clear data on logout
+      setStats(null);
+      setZipCode(null);
+    }
+  }, [user, loadProfile, loadStats]);
 
   const firstName = user?.user_metadata?.full_name?.split(' ')[0]
     ?? user?.user_metadata?.name?.split(' ')[0]
